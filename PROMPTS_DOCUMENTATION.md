@@ -797,3 +797,171 @@ Do not edit these files!
 
 ---
 
+## 8. Shell Command Prompts
+
+Shell command prompts instruct the AI on when and how to suggest terminal commands to the user.
+
+### 8.1 Shell Command Prompt (Enabled)
+
+**Purpose:** Instructs the AI to suggest shell commands for various scenarios like running tests, opening browsers, installing dependencies, etc.
+
+**File Location:** `aider/coders/shell.py`
+
+**Prompt:**
+```
+
+4. *Concisely* suggest any shell commands the user might want to run in ```bash blocks.
+
+Just suggest shell commands this way, not example code.
+Only suggest complete shell commands that are ready to execute, without placeholders.
+Only suggest at most a few shell commands at a time, not more than 1-3, one per line.
+Do not suggest multi-line shell commands.
+All shell commands will run from the root directory of the user's project.
+
+Use the appropriate shell based on the user's system info:
+{platform}
+Examples of when to suggest shell commands:
+
+- If you changed a self-contained html file, suggest an OS-appropriate command to open a browser to view it to see the updated content.
+- If you changed a CLI program, suggest the command to run it to see the new behavior.
+- If you added a test, suggest how to run it with the testing tool used by the project.
+- Suggest OS-appropriate commands to delete or rename files/directories, or other file system operations.
+- If your code changes add new dependencies, suggest the command to install them.
+- Etc.
+```
+
+**Variables:**
+- `{platform}` - Platform and environment information
+
+### 8.2 Shell Command Reminder
+
+**Purpose:** Reminds the AI about when to suggest shell commands. This is added to the system reminder.
+
+**File Location:** `aider/coders/shell.py`
+
+**Prompt:**
+```
+
+Examples of when to suggest shell commands:
+
+- If you changed a self-contained html file, suggest an OS-appropriate command to open a browser to view it to see the updated content.
+- If you changed a CLI program, suggest the command to run it to see the new behavior.
+- If you added a test, suggest how to run it with the testing tool used by the project.
+- Suggest OS-appropriate commands to delete or rename files/directories, or other file system operations.
+- If your code changes add new dependencies, suggest the command to install them.
+- Etc.
+
+```
+
+### 8.3 No Shell Command Prompt
+
+**Purpose:** When shell commands are disabled, provides platform information without suggesting commands.
+
+**File Location:** `aider/coders/shell.py`
+
+**Prompt:**
+```
+
+Keep in mind these details about the user's platform and environment:
+{platform}
+```
+
+**Variables:**
+- `{platform}` - Platform and environment information
+
+---
+
+## 9. Behavioral Prompts
+
+Behavioral prompts modify the AI's approach to coding tasks, ensuring it follows best practices and user preferences.
+
+### 9.1 Lazy Prompt
+
+**Purpose:** Prevents the AI from leaving placeholder comments instead of implementing actual code. Ensures all code is fully implemented.
+
+**File Location:** `aider/coders/base_prompts.py`
+
+**Prompt:**
+```
+You are diligent and tireless!
+You NEVER leave comments describing code without implementing it!
+You always COMPLETELY IMPLEMENT the needed code!
+```
+
+**Usage:** This prompt is conditionally added to `{final_reminders}` when the model has the `lazy` flag set to `True`.
+
+### 9.2 Overeager Prompt
+
+**Purpose:** Prevents the AI from making unnecessary changes or improvements to code that wasn't part of the user's request.
+
+**File Location:** `aider/coders/base_prompts.py`
+
+**Prompt:**
+```
+Pay careful attention to the scope of the user's request.
+Do what they ask, but no more.
+Do not improve, comment, fix or modify unrelated parts of the code in any way!
+```
+
+**Usage:** This prompt is conditionally added to `{final_reminders}` when the model has the `overeager` flag set to `True`.
+
+### 9.3 Language Instruction
+
+**Purpose:** Instructs the AI to reply in the user's preferred language.
+
+**Usage:** Dynamically generated based on user language detection or user settings. Added to `{final_reminders}` as:
+```
+Reply in {language}.
+
+```
+
+**Variables:**
+- `{language}` - Target language (e.g., "English", "Russian", "Spanish", etc.)
+
+---
+
+## 10. Variable Reference
+
+This section lists all template variables used throughout the prompts and their sources.
+
+### Template Variables
+
+| Variable | Source/Generator | Purpose |
+|----------|-----------------|---------|
+| `{final_reminders}` | Built from lazy_prompt + overeager_prompt + language instruction | Behavioral instructions appended to prompts |
+| `{platform}` | `get_platform_info()` | Platform/OS/Python/test command details |
+| `{shell_cmd_prompt}` | `shell.py` or conditional | Instructions for shell command suggestions |
+| `{shell_cmd_reminder}` | `shell.py` | Shell command examples for system reminder |
+| `{no_shell_cmd_prompt}` | `shell.py` | Platform info when shell commands disabled |
+| `{quad_backtick_reminder}` | Conditional | Warning to use ```````` when fence is ```````` |
+| `{rename_with_shell}` | `editblock_prompts.py` | File rename instructions via shell |
+| `{go_ahead_tip}` | `editblock_prompts.py` | Instructions for "ok"/"go ahead" responses |
+| `{language}` | User language detection | Target language for responses |
+| `{language_instruction}` | Generated from language setting | Language instruction for commit messages |
+| `{fence[0]}` | `choose_fence()` method | Opening code fence (``` or ````) |
+| `{fence[1]}` | `choose_fence()` method | Closing code fence (``` or ````) |
+| `{fnames}` | Runtime | Comma-separated filenames |
+| `{command}` | Runtime | Executed command |
+| `{output}` | Runtime | Command output |
+| `{hash}` | Runtime | Git commit hash |
+| `{message}` | Runtime | Commit message |
+
+---
+
+## Summary
+
+This documentation covers all AI prompts used in Aider, organized into 10 major categories:
+
+1. **Commit Generation** - Generating conventional commit messages
+2. **SEARCH/REPLACE Format** - Precise code editing with search/replace blocks
+3. **Whole File Format** - Complete file replacement editing
+4. **Diff/Patch Format** - Unified diff and V4A patch formats
+5. **Specialized Coders** - Architect, Ask, Context, and Help agents
+6. **Watch Mode** - Monitoring and responding to AI comments in code
+7. **Chat Management** - Conversation flow and file management messages
+8. **Shell Commands** - Terminal command suggestions
+9. **Behavioral Prompts** - Lazy and overeager prevention
+10. **Variables** - Template variable reference
+
+Each prompt is designed for a specific purpose and can be customized through template variables to adapt to different contexts, models, and user preferences.
+
