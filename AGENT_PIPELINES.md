@@ -428,3 +428,303 @@ Formatted Output:
 
 ---
 
+## 4. EditBlock (SEARCH/REPLACE) Pipeline
+
+The EditBlock coder uses SEARCH/REPLACE blocks to make precise code changes.
+
+### EditBlock Flow
+
+```
+User: "Add error handling to login function"
+    │
+    ↓
+System Prompt: EditBlockPrompts.main_system
+    └─ "Act as an expert software developer..."
+       "Use *SEARCH/REPLACE* blocks..."
+    │
+    ↓
+Example Messages: EditBlockPrompts.example_messages
+    └─ 2 examples showing SEARCH/REPLACE format
+    │
+    ↓
+LLM Response:
+    ```
+    auth.py
+    ```python
+    <<<<<<< SEARCH
+    def login(username, password):
+        return authenticate(username, password)
+    =======
+    def login(username, password):
+        try:
+            return authenticate(username, password)
+        except Exception as e:
+            logger.error(f"Login failed: {e}")
+            return None
+    >>>>>>> REPLACE
+    ```
+    │
+    ↓
+Parse Response: get_edits()
+    ├─ find_original_update_blocks(content, fence, fnames)
+    │   ├─ Find file path: "auth.py"
+    │   ├─ Extract SEARCH block (original code)
+    │   ├─ Extract REPLACE block (updated code)
+    │   └─ Return [(path, original, updated)]
+    │
+    └─ Extract shell commands (if any)
+    │
+    ↓
+Apply Changes: apply_edits(edits)
+    └─ For each edit:
+        ├─ Read current file content
+        ├─ do_replace(path, content, original, updated, fence)
+        │   ├─ Try exact match
+        │   ├─ Try with flexible whitespace
+        │   ├─ Try with common leading whitespace removed
+        │   └─ Report if no match found
+        └─ Write updated content
+    │
+    ↓
+Result: File modified with error handling added
+```
+
+### Prompts Used
+
+| Sequence | Prompt | From File | Content |
+|----------|--------|-----------|---------|
+| 1 | Main System | `editblock_prompts.py` | "Act as expert developer, use SEARCH/REPLACE blocks..." |
+| 2 | Example 1 | `editblock_prompts.py` | Factorial function refactor example |
+| 3 | Example 2 | `editblock_prompts.py` | Moving hello() to new file example |
+| 4 | System Reminder | `editblock_prompts.py` | "*SEARCH/REPLACE block* Rules..." |
+
+### Data Transformations
+
+```
+Input (User Request):
+    "Add error handling to login"
+
+Intermediate (LLM Output):
+    auth.py
+    ```python
+    <<<<<<< SEARCH
+    def login(...):
+        return authenticate(...)
+    =======
+    def login(...):
+        try:
+            return authenticate(...)
+        except Exception as e:
+            ...
+    >>>>>>> REPLACE
+    ```
+
+Parsed Edits:
+    [("auth.py", "def login(...):\n    return authenticate(...)",
+      "def login(...):\n    try:\n        return authenticate(...)\n...")]
+
+Applied to File:
+    File: auth.py
+    Line 45-46 replaced with lines 45-50
+```
+
+### Key Files
+
+| File | Methods | Purpose |
+|------|---------|---------|
+| `aider/coders/editblock_coder.py` | `get_edits()`, `apply_edits()` | Main EditBlock implementation |
+| `aider/coders/editblock_coder.py` | `find_original_update_blocks()` | Parse SEARCH/REPLACE blocks |
+| `aider/coders/editblock_coder.py` | `do_replace()` | Apply replacements with fuzzy matching |
+
+---
+
+## 5. WholeFile Pipeline
+
+The WholeFile coder returns complete file contents with changes applied.
+
+### WholeFile Flow
+
+```
+User: "Make the greeting more casual"
+    │
+    ↓
+System Prompt: WholeFilePrompts.main_system
+    └─ "Act as expert developer..."
+       "Output a copy of each file that needs changes"
+    │
+    ↓
+Example Message: WholeFilePrompts.example_messages
+    └─ 1 example showing complete file output
+    │
+    ↓
+LLM Response:
+    ```
+    greeting.py
+    ```python
+    import sys
+
+    def greeting(name):
+        print(f"Hey {name}")
+
+    if __name__ == '__main__':
+        greeting(sys.argv[1])
+    ```
+    ```
+    │
+    ↓
+Parse Response: get_edits(mode="update")
+    ├─ Find code fences
+    ├─ Extract filename from line before fence
+    ├─ Extract complete file content
+    └─ Return [(fname, fname_source, new_lines)]
+    │
+    ↓
+Apply Changes: apply_edits(edits)
+    └─ For each file:
+        ├─ Show live diff during streaming
+        ├─ Write complete new content
+        └─ Update file on disk
+    │
+    ↓
+Result: File rewritten with greeting changed
+```
+
+### Prompts Used
+
+| Sequence | Prompt | From File | Content |
+|----------|--------|-----------|---------|
+| 1 | Main System | `wholefile_prompts.py` | "Explain changes, output copy of each file..." |
+| 2 | Example | `wholefile_prompts.py` | Greeting change example |
+| 3 | System Reminder | `wholefile_prompts.py` | "*file listing* format rules..." |
+
+### Data Transformations
+
+```
+Input (User Request):
+    "Make greeting more casual"
+
+Intermediate (LLM Output):
+    greeting.py
+    ```python
+    import sys
+
+    def greeting(name):
+        print(f"Hey {name}")
+    ...
+    ```
+
+Parsed Edits:
+    [("greeting.py", "greeting.py",
+      ["import sys\n", "def greeting(name):\n", "    print(f\"Hey {name}\")\n", ...])]
+
+Applied to File:
+    File: greeting.py
+    Entire content replaced
+```
+
+### Key Files
+
+| File | Methods | Purpose |
+|------|---------|---------|
+| `aider/coders/wholefile_coder.py` | `get_edits()` | Parse complete file contents |
+| `aider/coders/wholefile_coder.py` | `apply_edits()` | Write new file contents |
+| `aider/coders/wholefile_coder.py` | `do_live_diff()` | Show incremental diff during streaming |
+
+---
+
+## 6. Diff/Patch Pipelines
+
+### 6.1 Patch (V4A Format) Pipeline
+
+```
+User: "Refactor factorial to use math.factorial"
+    │
+    ↓
+System Prompt: PatchPrompts.main_system
+    └─ "Use V4A diff format..."
+       "Enclosed within *** Begin Patch / *** End Patch"
+    │
+    ↓
+LLM Response:
+    ```
+    *** Begin Patch
+    *** Update File: app.py
+    @@
+    -from flask import Flask
+    +from flask import Flask
+    +import math
+    @@
+    -def factorial(n):
+    -    ...
+    +def factorial(n):
+    +    return math.factorial(n)
+    *** End Patch
+    ```
+    │
+    ↓
+Parse Response: get_edits()
+    ├─ find_diffs(content)
+    │   ├─ Extract hunks between *** markers
+    │   ├─ Parse @@ context markers
+    │   ├─ Extract - (removed) lines
+    │   └─ Extract + (added) lines
+    └─ Return [(fname, [hunks])]
+    │
+    ↓
+Apply Changes: apply_edits(edits)
+    └─ For each hunk:
+        ├─ normalize_hunk()
+        ├─ hunk_to_before_after()
+        ├─ apply_hunk() with fuzz levels (0, 1, 2)
+        └─ Update file content
+    │
+    ↓
+Result: Factorial refactored to use math library
+```
+
+### 6.2 UnifiedDiff Pipeline
+
+```
+User: "Replace is_prime with sympy.isprime"
+    │
+    ↓
+System Prompt: UnifiedDiffPrompts.main_system
+    └─ "Write changes like diff -U0 would produce"
+    │
+    ↓
+LLM Response:
+    ```diff
+    --- app.py
+    +++ app.py
+    @@ ... @@
+    -def is_prime(x):
+    -    ...
+    @@ ... @@
+    -    if is_prime(num):
+    +    if sympy.isprime(num):
+    ```
+    │
+    ↓
+Parse & Apply: Similar to Patch pipeline
+    └─ Uses standard unified diff format
+```
+
+### Prompts Used (Patch)
+
+| Sequence | Prompt | From File | Content |
+|----------|--------|-----------|---------|
+| 1 | Main System | `patch_prompts.py` | "Use V4A diff format..." |
+| 2 | Example 1 | `patch_prompts.py` | Factorial example |
+| 3 | Example 2 | `patch_prompts.py` | Refactor hello() example |
+| 4 | System Reminder | `patch_prompts.py` | "# V4A Diff Format Rules..." |
+
+### Key Files
+
+| File | Methods | Purpose |
+|------|---------|---------|
+| `aider/coders/patch_coder.py` | `get_edits()`, `find_diffs()` | Parse V4A patches |
+| `aider/coders/patch_coder.py` | `apply_hunk()` | Apply hunks with fuzzy matching |
+| `aider/coders/udiff_coder.py` | Similar methods | UnifiedDiff implementation |
+
+---
+
