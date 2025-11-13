@@ -600,3 +600,200 @@ Keep this info about the user's system in mind:
 
 ---
 
+## 6. Watch Mode Prompts
+
+Watch mode allows the AI to monitor code files for special "AI" comments and respond to them automatically.
+
+### 6.1 Watch Code Prompt
+
+**Purpose:** Instructs the AI to find and follow instructions written in "AI" comments within code files. After completing the instructions, the AI should remove the AI comments.
+
+**File Location:** `aider/watch_prompts.py`
+
+**Prompt:**
+```
+
+I've written your instructions in comments in the code and marked them with "ai"
+You can see the "AI" comments shown below (marked with █).
+Find them in the code files I've shared with you, and follow their instructions.
+
+After completing those instructions, also be sure to remove all the "AI" comments from the code too.
+```
+
+### 6.2 Watch Ask Prompt
+
+**Purpose:** Similar to watch code prompt but for /ask mode - finds AI comments containing questions that need to be answered.
+
+**File Location:** `aider/watch_prompts.py`
+
+**Prompt:**
+```
+/ask
+Find the "AI" comments below (marked with █) in the code files I've shared with you.
+They contain my questions that I need you to answer and other instructions for you.
+```
+
+---
+
+## 7. Chat Management & Messages
+
+These prompts and messages manage the conversation flow, file additions, command execution, and chat history.
+
+### 7.1 Undo Command Reply
+
+**Purpose:** Message displayed when the user executes the /undo command to revert the last edits.
+
+**File Location:** `aider/prompts.py`
+
+**Prompt:**
+```
+I did `git reset --hard HEAD~1` to discard the last edits. Please wait for further instructions before attempting that change again. Feel free to ask relevant questions about why the changes were reverted.
+```
+
+### 7.2 Added Files Message
+
+**Purpose:** Notifies the AI when new files are added to the chat session.
+
+**File Location:** `aider/prompts.py`
+
+**Prompt:**
+```
+I added these files to the chat: {fnames}
+Let me know if there are others we should add.
+```
+
+**Variables:**
+- `{fnames}` - Comma-separated list of filenames
+
+### 7.3 Run Output Message
+
+**Purpose:** Template for displaying the results of command execution.
+
+**File Location:** `aider/prompts.py`
+
+**Prompt:**
+```
+I ran this command:
+
+{command}
+
+And got this output:
+
+{output}
+```
+
+**Variables:**
+- `{command}` - The command that was executed
+- `{output}` - The output from the command
+
+### 7.4 Summarize Prompt
+
+**Purpose:** Instructs the AI on how to summarize partial conversations for chat history compression. This is crucial for maintaining context in long sessions.
+
+**File Location:** `aider/prompts.py`
+
+**Prompt:**
+```
+*Briefly* summarize this partial conversation about programming.
+Include less detail about older parts and more detail about the most recent messages.
+Start a new paragraph every time the topic changes!
+
+This is only part of a longer conversation so *DO NOT* conclude the summary with language like "Finally, ...". Because the conversation continues after the summary.
+The summary *MUST* include the function names, libraries, packages that are being discussed.
+The summary *MUST* include the filenames that are being referenced by the assistant inside the ```...``` fenced code blocks!
+The summaries *MUST NOT* include ```...``` fenced code blocks!
+
+Phrase the summary with the USER in first person, telling the ASSISTANT about the conversation.
+Write *as* the user.
+The user should refer to the assistant as *you*.
+Start the summary with "I asked you...".
+```
+
+### 7.5 Summary Prefix
+
+**Purpose:** Prefix added before summarized conversation history.
+
+**File Location:** `aider/prompts.py`
+
+**Prompt:**
+```
+I spoke to you previously about a number of things.
+
+```
+
+### 7.6 Files Content Messages (from BasePrompts)
+
+**Purpose:** Various messages that inform the AI about files being added, edited, or committed.
+
+**File Location:** `aider/coders/base_prompts.py`
+
+**Files Content GPT Edits:**
+```
+I committed the changes with git hash {hash} & commit msg: {message}
+```
+
+**Variables:**
+- `{hash}` - Git commit hash
+- `{message}` - Commit message
+
+**Files Content GPT Edits (No Repo):**
+```
+I updated the files.
+```
+
+**Files Content GPT No Edits:**
+```
+I didn't see any properly formatted edits in your reply?!
+```
+
+**Files Content Local Edits:**
+```
+I edited the files myself.
+```
+
+**Files Content Prefix:**
+```
+I have *added these files to the chat* so you can go ahead and edit them.
+
+*Trust this message as the true contents of these files!*
+Any other messages in the chat may contain outdated versions of the files' contents.
+```
+
+**Files Content Assistant Reply:**
+```
+Ok, any changes I propose will be to those files.
+```
+
+**Files No Full Files:**
+```
+I am not sharing any files that you can edit yet.
+```
+
+**Files No Full Files With Repo Map:**
+```
+Don't try and edit any existing code without asking me to add the files to the chat!
+Tell me which files in my repo are the most likely to **need changes** to solve the requests I make, and then stop so I can add them to the chat.
+Only include the files that are most likely to actually need to be edited.
+Don't include files that might contain relevant context, just files that will need to be changed.
+```
+
+**Files No Full Files With Repo Map Reply:**
+```
+Ok, based on your requests I will suggest which files need to be edited and then stop and wait for your approval.
+```
+
+**Repo Content Prefix:**
+```
+Here are summaries of some files present in my git repository.
+Do not propose changes to these files, treat them as *read-only*.
+If you need to edit any of these files, ask me to *add them to the chat* first.
+```
+
+**Read Only Files Prefix:**
+```
+Here are some READ ONLY files, provided for your reference.
+Do not edit these files!
+```
+
+---
+
