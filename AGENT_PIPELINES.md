@@ -728,3 +728,422 @@ Parse & Apply: Similar to Patch pipeline
 
 ---
 
+## 7. Specialized Coder Pipelines
+
+### 7.1 Architect Pipeline (Two-Stage Implementation)
+
+The Architect pipeline uses two AI agents: one for planning, one for implementation.
+
+```
+User: "Add user authentication system"
+    │
+    ↓
+STAGE 1: Planning (ArchitectCoder)
+    │
+    ├─ System Prompt: ArchitectPrompts.main_system
+    │   └─ "Act as expert architect engineer..."
+    │      "Provide direction to your editor engineer..."
+    │      "DO NOT show entire updated files!"
+    │
+    ├─ Files in Context: All relevant files
+    │
+    ├─ LLM (main_model) generates plan:
+    │   "To add authentication:
+    │    1. Create auth.py with AuthManager class
+    │    2. Add login/logout methods
+    │    3. Modify app.py to check authentication
+    │    4. Update database.py to store user credentials"
+    │
+    ├─ reply_completed() triggers stage 2
+    │   └─ Check auto_accept_architect (default: True)
+    │       ├─ If True: proceed automatically
+    │       └─ If False: ask user for confirmation
+    │
+    ↓
+STAGE 2: Implementation (EditorCoder)
+    │
+    ├─ Create new coder:
+    │   ├─ model = main_model.editor_model
+    │   └─ edit_format = main_model.editor_edit_format
+    │
+    ├─ Context includes architect's plan as user message
+    │
+    ├─ System Prompt: EditBlockPrompts.main_system
+    │   └─ (Uses editor's format, typically EditBlock)
+    │
+    ├─ LLM (editor_model) implements plan:
+    │   └─ Generates SEARCH/REPLACE blocks for all files
+    │
+    └─ apply_edits() applies all changes
+    │
+    ↓
+Result: Authentication system implemented
+```
+
+### 7.2 Context Pipeline (File Selection)
+
+The Context coder identifies which files need to be edited.
+
+```
+User: "Add caching to database queries"
+    │
+    ↓
+System Prompt: ContextPrompts.main_system
+    └─ "Identify ALL existing files that will need modification..."
+       "Return complete list with relevant symbols..."
+       "NEVER RETURN CODE!"
+    │
+    ↓
+Enhanced Repository Map:
+    └─ 8x larger repo_map (via map_mul_no_files multiplier)
+       Provides more context about codebase structure
+    │
+    ↓
+LLM Response:
+    "## ALL files we need to modify:
+
+     - database.py
+       - `Database` class with query methods
+       - `Database.query()` method
+     - cache.py (needs to be created)
+       - Will add `CacheManager` class
+
+     ## Relevant symbols from OTHER files:
+
+     - RedisClient for cache backend
+     - Config.cache_ttl setting"
+    │
+    ↓
+Parse Response: reply_completed()
+    ├─ Extract mentioned filenames
+    ├─ get_file_mentions(content, ignore_current=True)
+    ├─ Compare with current abs_fnames
+    └─ Update file list if different
+    │
+    ↓
+Reflection Check:
+    ├─ If mismatch detected between suggested and current files:
+    │   ├─ Set reflected_message with try_again prompt
+    │   ├─ Re-run with updated file set
+    │   └─ Max 3 reflections
+    └─ Else: finalize file selection
+    │
+    ↓
+Result: Correct files identified for caching feature
+```
+
+### 7.3 Ask Pipeline (Read-Only Analysis)
+
+```
+User: "How does the authentication flow work?"
+    │
+    ↓
+System Prompt: AskPrompts.main_system
+    └─ "Act as expert code analyst..."
+       "Answer questions about supplied code..."
+       "If you need to describe code changes, do so *briefly*"
+    │
+    ↓
+Files in Context: All relevant auth files
+    │
+    ↓
+LLM Response:
+    "The authentication flow works in 3 steps:
+     1. login() in auth.py validates credentials
+     2. create_session() generates session token
+     3. Token stored in database.py sessions table
+
+     The @require_auth decorator checks the token..."
+    │
+    ↓
+Processing:
+    ├─ get_edits() returns []
+    ├─ apply_edits() does nothing
+    └─ Display analysis to user
+    │
+    ↓
+Result: User receives code explanation (no files modified)
+```
+
+### 7.4 Help Pipeline
+
+```
+User: "/help How do I use /architect mode?"
+    │
+    ↓
+System Prompt: HelpPrompts.main_system
+    └─ "You are an expert on AI coding tool Aider..."
+       "Use provided aider documentation..."
+       "Include bulleted list of relevant doc URLs..."
+    │
+    ↓
+Documentation Context: Aider docs provided
+    │
+    ↓
+LLM Response:
+    "Architect mode uses a two-stage workflow:
+
+     1. Architect AI plans changes
+     2. Editor AI implements the plan
+
+     To use it: --architect or set edit-format in .aider.conf.yml
+
+     Relevant documentation:
+     - https://aider.chat/docs/usage/modes.html
+     - https://aider.chat/docs/config.html"
+    │
+    ↓
+Result: User gets help about Aider features
+```
+
+### Prompts Used by Specialized Coders
+
+| Coder | System Prompt File | Key Instruction | Returns Code? |
+|-------|-------------------|-----------------|---------------|
+| Architect | `architect_prompts.py` | "Provide direction to editor engineer" | No (plan only) |
+| Context | `context_prompts.py` | "Identify files to modify, NEVER RETURN CODE" | No (file list) |
+| Ask | `ask_prompts.py` | "Answer questions about code" | No (analysis) |
+| Help | `help_prompts.py` | "Expert on Aider usage" | No (help info) |
+
+---
+
+## 8. Commit Generation Pipeline
+
+After code changes are applied, Aider can automatically generate semantic commit messages.
+
+### Commit Generation Flow
+
+```
+Code Changes Applied
+    │
+    ↓
+auto_commit() triggered
+    │
+    ├─ Check if auto_commit enabled
+    └─ Check if git repo exists
+    │
+    ↓
+Collect Context:
+    │
+    ├─ Get git diff of changed files:
+    │   └─ repo.get_diffs(self.aider_edited_files)
+    │       ├─ For each file:
+    │       │   ├─ git show HEAD:path (get previous version)
+    │       │   └─ compare with current version
+    │       └─ Return unified diff
+    │
+    ├─ Build context from chat history:
+    │   └─ Recent user-assistant exchanges
+    │       └─ Provides semantic context for changes
+    │
+    └─ Extract URLs/issues mentioned
+    │
+    ↓
+Format Commit Request Message:
+    │
+    ├─ Include git diffs
+    ├─ Include chat context
+    └─ Add instructions for commit message format
+    │
+    ↓
+Send to LLM with commit_system Prompt:
+    │
+    Prompt from prompts.py :: commit_system:
+        "You are an expert software engineer that generates concise,
+         one-line Git commit messages based on the provided diffs.
+
+         Review the provided context and diffs about to be committed.
+         Generate a one-line commit message.
+
+         Format: <type>: <description>
+         Types: fix, feat, build, chore, ci, docs, style, refactor, perf, test
+
+         Ensure the message:
+         - Starts with appropriate prefix
+         - Is in imperative mood
+         - Does not exceed 72 characters
+
+         Reply only with the one-line commit message."
+    │
+    ↓
+LLM Response:
+    "feat: add user authentication with session management"
+    │
+    ↓
+Create Git Commit:
+    │
+    ├─ repo.commit(fnames, context, message)
+    │   ├─ git add [files]
+    │   ├─ git commit -m "feat: add user authentication..."
+    │   └─ Handle attribution (author, committer, co-authored-by)
+    │
+    └─ Display commit hash and message to user
+    │
+    ↓
+Result: Changes committed with AI-generated message
+```
+
+### Data Flow
+
+```
+Input (Code Changes):
+    auth.py: +45 lines, -3 lines
+    database.py: +12 lines
+
+Chat Context:
+    User: "Add user authentication"
+    Assistant: "I'll add login/logout methods..."
+
+Git Diff:
+    diff --git a/auth.py b/auth.py
+    +def login(username, password):
+    +    ...
+    +def logout(session_id):
+    +    ...
+
+Commit Prompt Variables:
+    {language_instruction} = ""  (or language-specific)
+
+LLM Output:
+    "feat: add user authentication with login and logout"
+
+Git Commit:
+    commit abc123def456
+    Author: User <user@example.com>
+    Date: ...
+
+    feat: add user authentication with login and logout
+```
+
+### Key Files
+
+| File | Method | Purpose |
+|------|--------|---------|
+| `aider/coders/base_coder.py` | `auto_commit()` | Trigger commit generation |
+| `aider/repo.py` | `commit()` | Execute git commit |
+| `aider/repo.py` | `get_diffs()` | Extract git diffs |
+| `aider/prompts.py` | `commit_system` | Commit message generation prompt |
+
+---
+
+## 9. Chat History Management
+
+Aider manages chat history with automatic summarization when context windows fill up.
+
+### Chat History Pipeline
+
+```
+New Message Added
+    │
+    ↓
+Check Token Count:
+    └─ format_messages() → all_messages()
+        └─ Count tokens in full message list
+    │
+    ↓
+IF tokens > context_window_limit:
+    │
+    ├─ Summarization Triggered
+    │   │
+    │   ├─ Select messages to summarize:
+    │   │   └─ done_messages (previous conversation)
+    │   │       └─ Exclude recent messages (keep last few)
+    │   │
+    │   ├─ Send to LLM with summarize prompt:
+    │   │   │
+    │   │   Prompt from prompts.py :: summarize:
+    │   │       "*Briefly* summarize this partial conversation...
+    │   │        Include less detail about older parts...
+    │   │        Summary *MUST* include function names, libraries, packages...
+    │   │        Summary *MUST* include filenames referenced in code blocks...
+    │   │
+    │   │        Phrase summary with USER in first person...
+    │   │        Start with 'I asked you...'"
+    │   │   │
+    │   │   └─ LLM generates summary
+    │   │
+    │   ├─ Recursive Summarization:
+    │   │   ├─ If summary still too long:
+    │   │   ├─ Split into chunks
+    │   │   ├─ Summarize each chunk
+    │   │   └─ Combine summaries
+    │   │   └─ Repeat until under token limit
+    │   │
+    │   └─ Replace done_messages with summary:
+    │       └─ Summary prefix + summarized content
+    │
+    └─ Continue with updated message list
+    │
+    ↓
+ELSE (tokens within limit):
+    └─ Use full chat history
+    │
+    ↓
+Assemble Final Context:
+    └─ ChatChunks with summarized or full history
+```
+
+### Summarization Example
+
+```
+Original Chat History (15,000 tokens):
+    User: "Add login feature"
+    Assistant: "I'll add login to auth.py..."
+    [Full code changes]
+    User: "Add logout too"
+    Assistant: "I'll add logout method..."
+    [Full code changes]
+    User: "Add password reset"
+    Assistant: "I'll create reset_password()..."
+    [Full code changes]
+
+Summarized History (2,000 tokens):
+    "I asked you to add a login feature. You created login() in auth.py
+     with username/password validation and session creation. Then I asked
+     you to add logout functionality. You added logout() method that clears
+     the session from database.py sessions table. Then I requested password
+     reset capability. You implemented reset_password() in auth.py that
+     generates reset tokens and sends emails via email_utils.py."
+
+Current Message:
+    User: "Add two-factor authentication"
+
+Final Context Sent to LLM:
+    [Summary] + [Current files] + [Current message]
+```
+
+### Key Files
+
+| File | Class/Method | Purpose |
+|------|--------------|---------|
+| `aider/history.py` | `ChatSummary` | Manages summarization |
+| `aider/history.py` | `summarize()` | Recursive summarization logic |
+| `aider/prompts.py` | `summarize` | Summarization prompt |
+| `aider/prompts.py` | `summary_prefix` | Prefix for summarized history |
+| `aider/coders/base_coder.py` | `format_chat_chunks()` | Includes done_messages |
+
+---
+
+## Summary
+
+This document has covered all major pipelines in Aider:
+
+1. **Main Request Flow** - Overall orchestration from user input to code changes
+2. **Message Assembly** - How context is organized with ChatChunks
+3. **System Prompt Construction** - Template variable resolution
+4. **EditBlock Pipeline** - SEARCH/REPLACE editing mode
+5. **WholeFile Pipeline** - Complete file replacement mode
+6. **Diff/Patch Pipelines** - Unified diff and V4A patch formats
+7. **Specialized Coders** - Architect, Context, Ask, Help modes
+8. **Commit Generation** - AI-powered commit message creation
+9. **Chat History** - Summarization and token management
+
+Each pipeline uses specific prompts from `PROMPTS_DOCUMENTATION.md` and follows a consistent pattern:
+- System prompt selection
+- Context assembly
+- LLM interaction
+- Response parsing
+- Action execution (editing, analyzing, or planning)
+
+For detailed prompt content, refer to `PROMPTS_DOCUMENTATION.md`.
+
